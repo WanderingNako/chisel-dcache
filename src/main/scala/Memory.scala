@@ -1,12 +1,10 @@
 import chisel3._
 import chisel3.util.Decoupled
 
-class Cache(addrWidth: Int, dataWidth: Int) extends Module {
-  val in      = IO(Flipped(Decoupled(new CacheInputBundle(addrWidth, dataWidth))))
-  val out     = IO(Decoupled(new CacheOutputBundle(dataWidth)))
-  //val in_mem  = IO(Flipped(Decoupled(new MemoryOutputBundle(dataWidth))))
-  //val out_mem = IO(Decoupled(new MemoryInputBundle(addrWidth, dataWidth)))
-  
+class Memory(addrWidth: Int, dataWidth: Int) extends Module {
+  val in  = IO(Flipped(Decoupled(new MemoryInputBundle(addrWidth, dataWidth))))
+  val out = IO(Decoupled(new MemoryOutputBundle(dataWidth)))
+
   val wen         = Reg(Bool())
   val waddr       = Reg(UInt())
   val wdata       = Reg(UInt())
@@ -40,7 +38,7 @@ class Cache(addrWidth: Int, dataWidth: Int) extends Module {
       waddr := req.waddr
       wdata := req.wdata
       raddr := req.raddr
-      busy := true.B
+      busy  := true.B
     }
   }
 }
