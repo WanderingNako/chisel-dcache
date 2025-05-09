@@ -33,9 +33,7 @@ class Cache(addrWidth: Int, dataWidth: Int) extends Module {
     when(!resultValid) {
       when(wen) {
         memory(waddr) := wdata
-        printf(cf"writing... 0x${wdata}%x to addr 0x${waddr}%x\n")
       }.otherwise {
-        printf(cf"reading... addr 0x${raddr}%x is 0x${memory(raddr)}%x\n")
         rdata := memory(raddr)
       }
       resultValid := true.B
@@ -54,7 +52,6 @@ class Cache(addrWidth: Int, dataWidth: Int) extends Module {
       wdata := req.wdata
       raddr := req.raddr
       busy  := true.B
-      printf(cf"Receive wen=${req.wen}%b, waddr=0x${req.waddr}%x, wdata=0x${req.wdata}%x, raddr=0x${req.raddr}%x\n")
     }
   }
 }
