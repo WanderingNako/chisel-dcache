@@ -341,3 +341,6 @@ hs_err_pid*
 
 # vscode
 .vscode/
+
+# vcd
+vcd/
