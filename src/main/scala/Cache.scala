@@ -2,10 +2,12 @@ import chisel3._
 import chisel3.util.Decoupled
 
 class Cache(addrWidth: Int, dataWidth: Int) extends Module {
-  val in      = IO(Flipped(Decoupled(new CacheInputBundle(addrWidth, dataWidth))))
-  val out     = IO(Decoupled(new CacheOutputBundle(dataWidth)))
-  //val in_mem  = IO(Flipped(Decoupled(new MemoryOutputBundle(dataWidth))))
-  //val out_mem = IO(Decoupled(new MemoryInputBundle(addrWidth, dataWidth)))
+  //CPU IO
+  val cpu_in  = IO(Flipped(Decoupled(new CPUInputBundle(addrWidth, dataWidth))))
+  val cpu_out = IO(Decoupled(new CPUOutputBundle(dataWidth)))
+  //MEMORY IO
+  val mem_in  = IO(Flipped(Decoupled(new MemoryOutputBundle(dataWidth))))
+  val mem_out = IO(Decoupled(new MemoryInputBundle(addrWidth, dataWidth)))
   
   val wen         = Reg(Bool())
   val waddr       = Reg(UInt())
@@ -14,28 +16,36 @@ class Cache(addrWidth: Int, dataWidth: Int) extends Module {
   val rdata       = Reg(UInt())
   val busy        = RegInit(false.B)
   val resultValid = RegInit(false.B)
-  val memory      = Mem(1 << addrWidth, UInt(dataWidth.W))
+  val mem_valid   = RegInit(false.B)
+  val mem_ready   = RegInit(true.B)
 
-  in.ready := !busy
-  out.valid := resultValid
-  out.bits.rdata := rdata
+  cpu_in.ready := !busy
+  cpu_out.valid := resultValid
+  cpu_out.bits.rdata := rdata
+
+  mem_in.ready := mem_ready
+  mem_out.valid := mem_valid
+  mem_out.bits.wen := wen
+  mem_out.bits.waddr := waddr
+  mem_out.bits.wdata := wdata
+  mem_out.bits.raddr := raddr
   
   when(busy){
     when(!resultValid) {
-      when(wen) {
-        memory(waddr) := wdata
-      }.otherwise {
-        rdata := memory(raddr)
+      mem_valid := true.B
+      when(mem_in.valid) {
+        rdata := mem_in.bits.rdata
+        mem_valid := false.B
+        resultValid := true.B
       }
-      resultValid := true.B
     }
-    when(out.ready && resultValid) {
+    when(cpu_out.ready && resultValid) {
       busy := false.B
       resultValid := false.B
     }
   }.otherwise{
-    when(in.valid) {
-      val req = in.deq()
+    when(cpu_in.valid) {
+      val req = cpu_in.deq()
       wen   := req.wen
       waddr := req.waddr
       wdata := req.wdata
