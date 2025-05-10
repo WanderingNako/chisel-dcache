@@ -1,13 +1,13 @@
 import chisel3._
 import chisel3.util.Decoupled
 
-class Cache(addrWidth: Int, dataWidth: Int) extends Module {
+class Cache(implicit p: Parameters) extends Module with HasCacheParams{
   //CPU IO
-  val cpu_in  = IO(Flipped(Decoupled(new CPUInputBundle(addrWidth, dataWidth))))
-  val cpu_out = IO(Decoupled(new CPUOutputBundle(dataWidth)))
+  val cpu_in  = IO(Flipped(Decoupled(new CPUInputBundle)))
+  val cpu_out = IO(Decoupled(new CPUOutputBundle))
   //MEMORY IO
-  val mem_in  = IO(Flipped(Decoupled(new MemoryOutputBundle(dataWidth))))
-  val mem_out = IO(Decoupled(new MemoryInputBundle(addrWidth, dataWidth)))
+  val mem_in  = IO(Flipped(Decoupled(new MemoryOutputBundle)))
+  val mem_out = IO(Decoupled(new MemoryInputBundle))
   
   val wen         = Reg(Bool())
   val waddr       = Reg(UInt())

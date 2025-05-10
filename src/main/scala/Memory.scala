@@ -1,9 +1,9 @@
 import chisel3._
 import chisel3.util.Decoupled
 
-class Memory(addrWidth: Int, dataWidth: Int) extends Module {
-  val in  = IO(Flipped(Decoupled(new MemoryInputBundle(addrWidth, dataWidth))))
-  val out = IO(Decoupled(new MemoryOutputBundle(dataWidth)))
+class Memory(implicit p: Parameters) extends Module {
+  val in  = IO(Flipped(Decoupled(new MemoryInputBundle)))
+  val out = IO(Decoupled(new MemoryOutputBundle))
 
   val wen         = Reg(Bool())
   val waddr       = Reg(UInt())
@@ -12,7 +12,7 @@ class Memory(addrWidth: Int, dataWidth: Int) extends Module {
   val rdata       = Reg(UInt())
   val busy        = RegInit(false.B)
   val resultValid = RegInit(false.B)
-  val memory      = Mem(1 << addrWidth, UInt(dataWidth.W))
+  val memory      = Mem(1 << p.addrWidth, UInt(p.dataWidth.W))
 
   in.ready := !busy
   out.valid := resultValid

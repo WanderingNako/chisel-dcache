@@ -2,7 +2,7 @@
 import _root_.circt.stage.ChiselStage
 object Elaborate extends App {
   ChiselStage.emitSystemVerilogFile(
-    new System(10, 32),
+    new System,
     args,
     firtoolOpts = Array("-disable-all-randomization", "-strip-debug-info", "-default-layer-specialization=enable")
   )

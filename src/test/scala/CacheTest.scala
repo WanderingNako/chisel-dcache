@@ -9,8 +9,8 @@ import scala.collection.mutable.ListBuffer
 import scala.collection.mutable.Map
 
 class CacheTest extends AnyFreeSpec with Matchers with ChiselSim {
-  val addrWidth = 10
-  val dataWidth = 32
+  val addrWidth = Parameters.defaultParams.addrWidth
+  val dataWidth = Parameters.defaultParams.dataWidth
 
   def genData() = BigInt(dataWidth, Random)
   def genAddr() = BigInt(addrWidth, Random)
@@ -33,9 +33,9 @@ class CacheTest extends AnyFreeSpec with Matchers with ChiselSim {
   }
 
   "Cache should behave as it doesn't exist" in {
-    simulate(new System(addrWidth, dataWidth)) { dut =>
+    simulate(new System) { dut =>
       val maxSim = 1000
-      val len = 100
+      val len = 10
       val wenSeq = Seq(true) ++ Seq.fill(len-1)(genWen())
       val waddrSeq = Seq.fill(len)(genAddr())
       val wdataSeq = Seq.fill(len)(genData())

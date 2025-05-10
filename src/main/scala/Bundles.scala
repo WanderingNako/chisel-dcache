@@ -1,23 +1,23 @@
 import chisel3._
 
-class CPUInputBundle(addrWidth: Int, dataWidth: Int) extends Bundle {
+class CPUInputBundle(implicit p: Parameters) extends Bundle {
   val wen   = Bool()
-  val waddr = UInt(addrWidth.W)
-  val wdata = UInt(dataWidth.W)
-  val raddr = UInt(addrWidth.W)
+  val waddr = UInt(p.addrWidth.W)
+  val wdata = UInt(p.dataWidth.W)
+  val raddr = UInt(p.addrWidth.W)
 }
 
-class CPUOutputBundle(dataWidth: Int) extends Bundle {
-  val rdata = UInt(dataWidth.W)
+class CPUOutputBundle(implicit p: Parameters) extends Bundle {
+  val rdata = UInt(p.dataWidth.W)
 }
 
-class MemoryInputBundle(addrWidth: Int, dataWidth: Int) extends Bundle {
+class MemoryInputBundle(implicit p: Parameters) extends Bundle {
   val wen = Bool()
-  val waddr = UInt(addrWidth.W)
-  val wdata = UInt(dataWidth.W)
-  val raddr = UInt(addrWidth.W)
+  val waddr = UInt(p.addrWidth.W)
+  val wdata = UInt(p.dataWidth.W)
+  val raddr = UInt(p.addrWidth.W)
 }
 
-class MemoryOutputBundle(dataWidth: Int) extends Bundle {
-  val rdata = UInt(dataWidth.W)
+class MemoryOutputBundle(implicit p: Parameters) extends Bundle {
+  val rdata = UInt(p.dataWidth.W)
 }
