@@ -1,7 +1,7 @@
 import chisel3._
 import chisel3.util.Decoupled
 
-class System(implicit p: Parameters) extends Module {
+class System(implicit val p: Parameters) extends Module {
   val in  = IO(Flipped(Decoupled(new CPUInputBundle)))
   val out = IO(Decoupled(new CPUOutputBundle))
 

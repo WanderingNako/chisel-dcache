@@ -9,12 +9,10 @@ import scala.collection.mutable.ListBuffer
 import scala.collection.mutable.Map
 
 class CacheTest extends AnyFreeSpec with Matchers with ChiselSim {
-  val addrWidth = Parameters.defaultParams.addrWidth
-  val dataWidth = Parameters.defaultParams.dataWidth
 
-  def genData() = BigInt(dataWidth, Random)
-  def genAddr() = BigInt(addrWidth, Random)
-  def genWen()  = Random.nextInt(2) == 0
+  def genWen() = Random.nextInt(2) == 0
+  def genData(dataWidth: Int) = BigInt(dataWidth, Random)
+  def genAddr(addrWidth: Int) = BigInt(addrWidth, Random)
 
   def goldenReference(testSeq: Seq[(Boolean, BigInt, BigInt, BigInt)]) = {
     val resultBuffer = ListBuffer[BigInt]()
@@ -37,8 +35,8 @@ class CacheTest extends AnyFreeSpec with Matchers with ChiselSim {
       val maxSim = 1000
       val len = 10
       val wenSeq = Seq(true) ++ Seq.fill(len-1)(genWen())
-      val waddrSeq = Seq.fill(len)(genAddr())
-      val wdataSeq = Seq.fill(len)(genData())
+      val waddrSeq = Seq.fill(len)(genAddr(dut.p.addrWidth))
+      val wdataSeq = Seq.fill(len)(genData(dut.p.dataWidth))
       //waddrHistory holds all write addr until now
       val waddrHistory = ListBuffer[Seq[BigInt]]()
       val raddrBuffer = ListBuffer[BigInt]()
