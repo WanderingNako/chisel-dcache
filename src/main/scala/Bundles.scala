@@ -21,3 +21,10 @@ class MemoryInputBundle(implicit p: Parameters) extends Bundle {
 class MemoryOutputBundle(implicit p: Parameters) extends Bundle {
   val rdata = UInt(p.dataWidth.W)
 }
+
+
+class MetaBundle(implicit p: Parameters) extends Bundle with HasCacheParams {
+  val valid = Bool()
+  val tag   = UInt(cacheParams.tagWidth.W)
+  val dirty = Bool()
+}
