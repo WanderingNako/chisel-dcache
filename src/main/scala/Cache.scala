@@ -1,6 +1,7 @@
 import chisel3._
 import chisel3.util.Decoupled
 import chisel3.util.PriorityEncoder
+import chisel3.util.Cat
 
 class Cache(implicit p: Parameters) extends Module with HasCacheParams{
   //CPU IO
@@ -24,20 +25,37 @@ class Cache(implicit p: Parameters) extends Module with HasCacheParams{
   val data        = Mem(cacheParams.nSets, Vec(cacheParams.nWays, UInt(p.dataWidth.W)))
 
   val index           = Wire(UInt())
-  val maskInvalid     = Wire(Vec(cacheParams.nWays, Bool()))
-  val hasInvalid      = Wire(Bool())
-  val firstInvalidIdx = Wire(UInt())
-
-  maskInvalid     := meta(index).map(!_.valid)
-  hasInvalid      := maskInvalid.reduce(_ || _)
-  firstInvalidIdx := PriorityEncoder(maskInvalid)
-  printf(cf"first:=${firstInvalidIdx}, index:=${index}\n")
-
   when(wen) {
     index := waddr(cacheParams.indexWidth+cacheParams.offset-1, cacheParams.offset)
   }.otherwise {
     index := raddr(cacheParams.indexWidth+cacheParams.offset-1, cacheParams.offset)
   }
+
+
+  val maskInvalid     = Wire(Vec(cacheParams.nWays, Bool()))
+  val hasInvalid      = Wire(Bool())
+  val firstInvalidIdx = Wire(UInt())
+  maskInvalid     := meta(index).map(!_.valid)
+  hasInvalid      := maskInvalid.reduce(_||_)
+  firstInvalidIdx := PriorityEncoder(maskInvalid)
+
+  val maskHit = Wire(Vec(cacheParams.nWays, Bool()))
+  val hit     = Wire(Bool())
+  val hitIdx  = Wire(UInt())
+  maskHit := meta(index).map(_.tag === raddr(p.addrWidth-1, p.addrWidth-cacheParams.tagWidth))
+  hitIdx  := PriorityEncoder(maskHit)
+  hit     := maskHit.reduce(_||_) && meta(index)(hitIdx).valid
+
+  val evictMeta = Wire(new MetaBundle)
+  val evictData = Wire(UInt(p.dataWidth.W))
+  evictMeta := meta(index)(0)
+  evictData := data(index)(0)
+
+  
+  //printf(cf"maskInvalid_0=${maskInvalid(0)}, maskInvalid_1=${maskInvalid(1)}, maskInvalid_2=${maskInvalid(2)}, maskInvalid_3=${maskInvalid(3)}\n")
+  //printf(cf"first:=${firstInvalidIdx}, index:=${index}, hasInvalid:=${hasInvalid}\n")
+
+  
 
   cpu_in.ready := !busy
   cpu_out.valid := resultValid
@@ -46,24 +64,55 @@ class Cache(implicit p: Parameters) extends Module with HasCacheParams{
   mem_in.ready := mem_ready
   mem_out.valid := mem_valid
   mem_out.bits.wen := wen
-  mem_out.bits.waddr := waddr
-  mem_out.bits.wdata := wdata
+  mem_out.bits.waddr := Cat(evictMeta.tag, index, waddr(cacheParams.offset-1, 0))
+  mem_out.bits.wdata := evictData
   mem_out.bits.raddr := raddr
   
   when(busy){
     when(!resultValid) {
+      //Write
       when(wen) {
-        when(hasInvalid) {
+        //Don't need to evict
+        when(hit) {
+          meta(index)(hitIdx).dirty := true.B
+          data(index)(hitIdx)       := wdata
+          resultValid := true.B
+        }
+        .elsewhen(hasInvalid) {
           meta(index)(firstInvalidIdx).valid := true.B
           meta(index)(firstInvalidIdx).tag   := waddr(p.addrWidth-1, p.addrWidth-cacheParams.tagWidth)
           meta(index)(firstInvalidIdx).dirty := false.B
+          data(index)(firstInvalidIdx)       := wdata
+          resultValid := true.B
+        }.otherwise {
+          //Need to evict
+          when(evictMeta.dirty) {
+            mem_valid := true.B
+            when(mem_in.valid) {
+              mem_valid := false.B
+              evictMeta.valid := false.B
+            }
+          }.otherwise {
+            evictMeta.tag   := waddr(p.addrWidth-1, p.addrWidth-cacheParams.tagWidth)
+            evictMeta.dirty := true.B
+            evictData       := wdata
+            resultValid     := true.B
+          }
         }
-      }
-      mem_valid := true.B
-      when(mem_in.valid) {
-        rdata := mem_in.bits.rdata
-        mem_valid := false.B
-        resultValid := true.B
+      }.otherwise {
+        //Read
+        when(hit) {
+          rdata := data(index)(hitIdx)
+          resultValid := true.B
+        }.otherwise {
+          mem_valid := true.B
+          when(mem_in.valid) {
+            mem_valid := false.B
+            rdata := mem_in.bits.rdata
+            resultValid := true.B
+          }
+
+        }
       }
     }
     when(cpu_out.ready && resultValid) {
