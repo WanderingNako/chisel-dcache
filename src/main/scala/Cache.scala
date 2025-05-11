@@ -21,8 +21,11 @@ class Cache(implicit p: Parameters) extends Module with HasCacheParams{
   val mem_valid   = RegInit(false.B)
   val mem_ready   = RegInit(true.B)
 
-  val meta        = Mem(cacheParams.nSets, Vec(cacheParams.nWays, new MetaBundle))
-  val data        = Mem(cacheParams.nSets, Vec(cacheParams.nWays, UInt(p.dataWidth.W)))
+  //val meta        = Mem(cacheParams.nSets, Vec(cacheParams.nWays, new MetaBundle))
+  val meta = RegInit(VecInit(Seq.fill(cacheParams.nSets)(
+    VecInit(Seq.fill(cacheParams.nWays)(MetaBundle.default()))
+  )))
+  val data = Mem(cacheParams.nSets, Vec(cacheParams.nWays, UInt(p.dataWidth.W)))
 
   val index           = Wire(UInt())
   when(wen) {
@@ -46,13 +49,9 @@ class Cache(implicit p: Parameters) extends Module with HasCacheParams{
   hitIdx  := PriorityEncoder(maskHit)
   hit     := maskHit.reduce(_||_) && meta(index)(hitIdx).valid
 
-  val evictMeta = Wire(new MetaBundle)
-  val evictData = Wire(UInt(p.dataWidth.W))
-  evictMeta := meta(index)(0)
-  evictData := data(index)(0)
-
-  
-  //printf(cf"maskInvalid_0=${maskInvalid(0)}, maskInvalid_1=${maskInvalid(1)}, maskInvalid_2=${maskInvalid(2)}, maskInvalid_3=${maskInvalid(3)}\n")
+  val evictIdx = Wire(UInt())
+  evictIdx := 0.U
+  //printf(cf"%T maskInvalid_0=${maskInvalid(0)}, maskInvalid_1=${maskInvalid(1)}, maskInvalid_2=${maskInvalid(2)}, maskInvalid_3=${maskInvalid(3)}\n")
   //printf(cf"first:=${firstInvalidIdx}, index:=${index}, hasInvalid:=${hasInvalid}\n")
 
   
@@ -64,8 +63,8 @@ class Cache(implicit p: Parameters) extends Module with HasCacheParams{
   mem_in.ready := mem_ready
   mem_out.valid := mem_valid
   mem_out.bits.wen := wen
-  mem_out.bits.waddr := Cat(evictMeta.tag, index, waddr(cacheParams.offset-1, 0))
-  mem_out.bits.wdata := evictData
+  mem_out.bits.waddr := Cat(meta(index)(evictIdx).tag, index, waddr(cacheParams.offset-1, 0))
+  mem_out.bits.wdata := data(index)(evictIdx)
   mem_out.bits.raddr := raddr
   
   when(busy){
@@ -86,16 +85,16 @@ class Cache(implicit p: Parameters) extends Module with HasCacheParams{
           resultValid := true.B
         }.otherwise {
           //Need to evict
-          when(evictMeta.dirty) {
+          when(meta(index)(evictIdx).dirty) {
             mem_valid := true.B
             when(mem_in.valid) {
               mem_valid := false.B
-              evictMeta.valid := false.B
+              meta(index)(evictIdx).valid := false.B
             }
           }.otherwise {
-            evictMeta.tag   := waddr(p.addrWidth-1, p.addrWidth-cacheParams.tagWidth)
-            evictMeta.dirty := true.B
-            evictData       := wdata
+            meta(index)(evictIdx).tag   := waddr(p.addrWidth-1, p.addrWidth-cacheParams.tagWidth)
+            meta(index)(evictIdx).dirty := true.B
+            data(index)(evictIdx)       := wdata
             resultValid     := true.B
           }
         }
@@ -109,7 +108,9 @@ class Cache(implicit p: Parameters) extends Module with HasCacheParams{
           when(mem_in.valid) {
             mem_valid := false.B
             rdata := mem_in.bits.rdata
-            resultValid := true.B
+            wen := true.B
+            waddr := raddr
+            wdata := rdata
           }
 
         }

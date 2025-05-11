@@ -33,7 +33,7 @@ class CacheTest extends AnyFreeSpec with Matchers with ChiselSim {
   "Cache should behave as it doesn't exist" in {
     simulate(new System) { dut =>
       val maxSim = 1000
-      val len = 2
+      val len = 100
       val wenSeq = Seq(true) ++ Seq.fill(len-1)(genWen())
       val waddrSeq = Seq.fill(len)(genAddr(dut.p.addrWidth))
       val wdataSeq = Seq.fill(len)(genData(dut.p.dataWidth))

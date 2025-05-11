@@ -4,15 +4,18 @@ import chisel3.util._
 case class Parameters(
   addrWidth: Int = 16, 
   dataWidth: Int = 32
-)
+){
+  require(dataWidth % 8 == 0, "DataWidth must be multiple of 8.")
+  def dataBytes = dataWidth / 8
+}
 
 object Parameters {
   implicit val defaultParams: Parameters = Parameters()
 }
 
 case class CacheParams (
-  nSets: Int = 64,
-  nWays: Int = 4,
+  nSets: Int = 2,
+  nWays: Int = 2,
   blockBytes: Int = 64
 )(implicit p: Parameters) {
   require(tagWidth >= 0, "AddrWidth must >= indexWidth + wayWidth + offset")
@@ -26,4 +29,12 @@ case class CacheParams (
 
 trait HasCacheParams {
   val cacheParams: CacheParams = CacheParams()
+}
+
+case class MemoryParams (
+  nBytes : Int = 1 << 20
+)
+
+trait HasMemoryParams {
+  val memoryParams: MemoryParams = MemoryParams()
 }

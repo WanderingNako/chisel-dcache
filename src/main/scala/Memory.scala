@@ -1,7 +1,7 @@
 import chisel3._
 import chisel3.util.Decoupled
 
-class Memory(implicit p: Parameters) extends Module {
+class Memory(implicit p: Parameters) extends Module with HasMemoryParams {
   val in  = IO(Flipped(Decoupled(new MemoryInputBundle)))
   val out = IO(Decoupled(new MemoryOutputBundle))
 
@@ -12,7 +12,7 @@ class Memory(implicit p: Parameters) extends Module {
   val rdata       = Reg(UInt())
   val busy        = RegInit(false.B)
   val resultValid = RegInit(false.B)
-  val memory      = Mem(1 << p.addrWidth, UInt(p.dataWidth.W))
+  val memory      = Mem(memoryParams.nBytes, UInt(8.W))
 
   in.ready := !busy
   out.valid := resultValid
@@ -21,9 +21,13 @@ class Memory(implicit p: Parameters) extends Module {
   when(busy){
     when(!resultValid) {
       when(wen) {
-        memory(waddr) := wdata
+        for(i <- 0 until p.dataBytes){
+          memory(waddr + i.U) := wdata((i+1)*8-1, i*8)
+        }
       }.otherwise {
-        rdata := memory(raddr)
+        for(i <- 0 until p.dataBytes){
+          rdata := (rdata << 8) | memory(raddr + i.U)
+        }
       }
       resultValid := true.B
     }

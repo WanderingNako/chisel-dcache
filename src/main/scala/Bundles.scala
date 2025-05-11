@@ -28,3 +28,13 @@ class MetaBundle(implicit p: Parameters) extends Bundle with HasCacheParams {
   val tag   = UInt(cacheParams.tagWidth.W)
   val dirty = Bool()
 }
+
+object MetaBundle {
+  def default() : MetaBundle = {
+    val m = Wire(new MetaBundle)
+    m.valid := false.B
+    m.tag   := 0.U
+    m.dirty := false.B
+    m
+  }
+}
