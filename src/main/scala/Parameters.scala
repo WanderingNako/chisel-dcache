@@ -14,8 +14,8 @@ object Parameters {
 }
 
 case class CacheParams (
-  nSets: Int = 2,
-  nWays: Int = 2,
+  nSets: Int = 64,
+  nWays: Int = 4,
   blockBytes: Int = 64
 )(implicit p: Parameters) {
   require(tagWidth >= 0, "AddrWidth must >= indexWidth + wayWidth + offset")
@@ -25,6 +25,7 @@ case class CacheParams (
   def indexWidth = log2Up(nSets)
   def offset     = log2Up(blockBytes)
   def tagWidth   = p.addrWidth - indexWidth - offset
+  def blockWidth = blockBytes * 8
 }
 
 trait HasCacheParams {
@@ -32,7 +33,8 @@ trait HasCacheParams {
 }
 
 case class MemoryParams (
-  nBytes : Int = 1 << 20
+  nBytes: Int = 1 << 20,
+  nBurstBytes: Int = 64
 )
 
 trait HasMemoryParams {

@@ -4,6 +4,7 @@ import chisel3.simulator.scalatest.ChiselSim
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.must.Matchers
 import chisel3.util.PriorityEncoder
+import chisel3.util.Cat
 
 class TempTest extends AnyFreeSpec with Matchers with ChiselSim {
 
@@ -14,8 +15,8 @@ class TempTest extends AnyFreeSpec with Matchers with ChiselSim {
         val hasInvalid = Output(Bool())
         val firstInvalidIdx = Output(UInt(2.W))
       })
-      io.hasInvalid := io.in.reduce(_||_)
-      io.firstInvalidIdx := PriorityEncoder(io.in)
+      io.hasInvalid := io.in.exists(x=>x)
+      io.firstInvalidIdx := io.in.indexWhere(x=>x)
     }) { dut =>
       //=======================Start Simulation========================
       dut.reset.poke(true.B)
@@ -29,7 +30,7 @@ class TempTest extends AnyFreeSpec with Matchers with ChiselSim {
       dut.io.in(3).poke(false.B)
 
       dut.io.hasInvalid.expect(false.B)
-      if(dut.io.hasInvalid.peek().litToBoolean) dut.io.firstInvalidIdx.expect(3.U)
+      dut.io.firstInvalidIdx.expect(3.U)
   }
   }
 }

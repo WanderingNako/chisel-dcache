@@ -8,38 +8,17 @@ import scala.util.Random
 import scala.collection.mutable.ListBuffer
 import scala.collection.mutable.Map
 
-class CacheTest extends AnyFreeSpec with Matchers with ChiselSim {
-
-  def genWen() = Random.nextInt(2) == 0
-  def genData(dataWidth: Int) = BigInt(dataWidth, Random)
-  def genAddr(addrWidth: Int) = BigInt(addrWidth, Random)
-
-  def goldenReference(testSeq: Seq[(Boolean, BigInt, BigInt, BigInt)]) = {
-    val resultBuffer = ListBuffer[BigInt]()
-    val memory = Map.empty[BigInt, BigInt]
-    for(i <- 0 until testSeq.length) {
-      if(testSeq(i)._1) {
-        if(memory.contains(testSeq(i)._2)) memory(testSeq(i)._2) = testSeq(i)._3
-        else memory += testSeq(i)._2 -> testSeq(i)._3
-        resultBuffer += 0
-      }
-      else {
-        resultBuffer += memory(testSeq(i)._4)
-      }
-    }
-    resultBuffer.toList
-  }
-
+class CacheTest extends AnyFreeSpec with Matchers with ChiselSim with HasMemoryParams{
   "Cache should behave as it doesn't exist" in {
     simulate(new System) { dut =>
-      val maxSim = 1000
-      val len = 100
+      val maxSim = 10000
+      val len = 500
       val wenSeq = Seq(true) ++ Seq.fill(len-1)(genWen())
       val waddrSeq = Seq.fill(len)(genAddr(dut.p.addrWidth))
-      val wdataSeq = Seq.fill(len)(genData(dut.p.dataWidth))
+      val wdataSeq = Seq.fill(len)(genData())
       //waddrHistory holds all write addr until now
-      val waddrHistory = ListBuffer[Seq[BigInt]]()
-      val raddrBuffer = ListBuffer[BigInt]()
+      val waddrHistory = ListBuffer[Seq[Int]]()
+      val raddrBuffer = ListBuffer[Int]()
       for(i <- 0 until len) {
         if(i == 0) {
           waddrHistory += Seq(waddrSeq(i))
@@ -57,7 +36,7 @@ class CacheTest extends AnyFreeSpec with Matchers with ChiselSim {
       val testValues = wenSeq.zip(waddrSeq).zip(wdataSeq).zip(raddrBuffer.toList).map{
         case (((a, b), c), d) => (a, b, c, d)
       }
-      val resultSeq = goldenReference(testValues)
+      val resultSeq = goldenReference(testValues, memoryParams.nBytes, dut.p.dataWidth / 8)
 
       //=======================Start Simulation========================
       dut.reset.poke(true.B)
@@ -93,5 +72,50 @@ class CacheTest extends AnyFreeSpec with Matchers with ChiselSim {
       }
       println(s"Total cycles: ${cycles}")
     }
+  }
+
+  def genWen() = Random.nextInt(2) == 0
+  def genData() = Random.nextInt(Int.MaxValue)
+  //Addr is 4byte align to avoid different Blocks (Depends on DataBytes)
+  def genAddr(addrWidth: Int) = Random.nextInt(1 << addrWidth) & ~0x3
+
+  def int2Bytes(value: Int): Array[Byte] = {
+    Array(
+      value.toByte,
+      (value >>> 8).toByte,
+      (value >>> 16).toByte,
+      (value >>> 24).toByte
+    )
+  }
+
+  def bytes2Int(bytes: Array[Byte]): Int = {
+    require(bytes.length == 4, "Byte array must be exactly 4 bytes for Int")
+    
+    ((bytes(3) & 0xFF) << 24) |
+    ((bytes(2) & 0xFF) << 16) |
+    ((bytes(1) & 0xFF) << 8)  |
+    (bytes(0) & 0xFF)
+  }
+
+  def goldenReference(testSeq: Seq[(Boolean, Int, Int, Int)], msize: Int, dbytes: Int) = {
+    val resultBuffer = ListBuffer[Int]()
+    val memory = new Array[Byte](msize)
+    val resultArray = new Array[Byte](dbytes)
+    for(i <- 0 until testSeq.length) {
+      if(testSeq(i)._1) {
+        var dataArray: Array[Byte] = int2Bytes(testSeq(i)._3)
+        for(j <- 0 until dbytes) {
+          memory(testSeq(i)._2 + j) = dataArray(j)
+        }
+        resultBuffer += 0
+      }
+      else {
+        for(j <- 0 until dbytes) {
+          resultArray(j) = memory(testSeq(i)._4 + j)
+        }
+        resultBuffer += bytes2Int(resultArray)
+      }
+    }
+    resultBuffer.toList
   }
 }

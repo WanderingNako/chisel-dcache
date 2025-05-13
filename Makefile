@@ -5,7 +5,7 @@ RPJ = dcache
 VCDS = $(shell find . -type f -name "*.vcd")
 
 test:
-	@./mill -i $(RPJ).test
+	@./mill -i $(RPJ).test.testOnly CacheTest
 
 verilog:
 	@./mill -i $(RPJ).runMain Elaborate --target-dir $(BUILD_DIR)

@@ -6,10 +6,10 @@ class Memory(implicit p: Parameters) extends Module with HasMemoryParams {
   val out = IO(Decoupled(new MemoryOutputBundle))
 
   val wen         = Reg(Bool())
-  val waddr       = Reg(UInt())
-  val wdata       = Reg(UInt())
-  val raddr       = Reg(UInt())
-  val rdata       = Reg(UInt())
+  val waddr       = Reg(UInt(p.addrWidth.W))
+  val wdata       = Reg(Vec(memoryParams.nBurstBytes, UInt(8.W)))
+  val raddr       = Reg(UInt(p.addrWidth.W))
+  val rdata       = Reg(Vec(memoryParams.nBurstBytes, UInt(8.W)))
   val busy        = RegInit(false.B)
   val resultValid = RegInit(false.B)
   val memory      = Mem(memoryParams.nBytes, UInt(8.W))
@@ -21,12 +21,12 @@ class Memory(implicit p: Parameters) extends Module with HasMemoryParams {
   when(busy){
     when(!resultValid) {
       when(wen) {
-        for(i <- 0 until p.dataBytes){
-          memory(waddr + i.U) := wdata((i+1)*8-1, i*8)
+        for(i <- 0 until memoryParams.nBurstBytes){
+          memory.write(waddr+i.U, wdata(i))
         }
       }.otherwise {
-        for(i <- 0 until p.dataBytes){
-          rdata := (rdata << 8) | memory(raddr + i.U)
+        for(i <- 0 until memoryParams.nBurstBytes){
+          rdata(i) := memory.read(raddr+i.U)
         }
       }
       resultValid := true.B

@@ -12,49 +12,70 @@ class Cache(implicit p: Parameters) extends Module with HasCacheParams{
   val mem_out = IO(Decoupled(new MemoryInputBundle))
   
   val wen         = Reg(Bool())
-  val waddr       = Reg(UInt())
-  val wdata       = Reg(UInt())
-  val raddr       = Reg(UInt())
-  val rdata       = Reg(UInt())
+  val waddr       = Reg(UInt(p.addrWidth.W))
+  val wdata       = Reg(UInt(p.dataWidth.W))
+  val raddr       = Reg(UInt(p.addrWidth.W))
+  val rdata       = Reg(UInt(p.dataWidth.W))
   val busy        = RegInit(false.B)
   val resultValid = RegInit(false.B)
   val mem_valid   = RegInit(false.B)
   val mem_ready   = RegInit(true.B)
+  val recover     = RegInit(true.B) //Write Allocate need to recover mem block when miss
+  val recData     = Reg(Vec(cacheParams.blockBytes, UInt(8.W)))
+  val writeBack   = RegInit(false.B)
 
   //val meta        = Mem(cacheParams.nSets, Vec(cacheParams.nWays, new MetaBundle))
   val meta = RegInit(VecInit(Seq.fill(cacheParams.nSets)(
     VecInit(Seq.fill(cacheParams.nWays)(MetaBundle.default()))
   )))
-  val data = Mem(cacheParams.nSets, Vec(cacheParams.nWays, UInt(p.dataWidth.W)))
+  val data = Mem(cacheParams.nSets, Vec(cacheParams.nWays, Vec(cacheParams.blockBytes, UInt(8.W))))
 
-  val index           = Wire(UInt())
+  val tag     = Wire(UInt(cacheParams.tagWidth.W))
+  val index   = Wire(UInt(cacheParams.indexWidth.W))
+  val offset  = Wire(UInt(cacheParams.offset.W))
+  val recAddr = Wire(UInt(p.addrWidth.W))
   when(wen) {
-    index := waddr(cacheParams.indexWidth+cacheParams.offset-1, cacheParams.offset)
+    tag     := waddr(p.addrWidth-1, p.addrWidth-cacheParams.tagWidth)
+    index   := waddr(cacheParams.indexWidth+cacheParams.offset-1, cacheParams.offset)
+    offset  := waddr(cacheParams.offset-1, 0)
+    recAddr := Cat(waddr(p.addrWidth-1, cacheParams.offset), 0.U(cacheParams.offset.W))
   }.otherwise {
-    index := raddr(cacheParams.indexWidth+cacheParams.offset-1, cacheParams.offset)
+    tag     := raddr(p.addrWidth-1, p.addrWidth-cacheParams.tagWidth)
+    index   := raddr(cacheParams.indexWidth+cacheParams.offset-1, cacheParams.offset)
+    offset  := raddr(cacheParams.offset-1, 0)
+    recAddr := Cat(raddr(p.addrWidth-1, cacheParams.offset), 0.U(cacheParams.offset.W))
   }
 
-
-  val maskInvalid     = Wire(Vec(cacheParams.nWays, Bool()))
   val hasInvalid      = Wire(Bool())
   val firstInvalidIdx = Wire(UInt())
-  maskInvalid     := meta(index).map(!_.valid)
-  hasInvalid      := maskInvalid.reduce(_||_)
-  firstInvalidIdx := PriorityEncoder(maskInvalid)
+  hasInvalid      := meta(index).exists((x) => {!x.valid})
+  firstInvalidIdx := meta(index).indexWhere((x) => {!x.valid})
 
-  val maskHit = Wire(Vec(cacheParams.nWays, Bool()))
   val hit     = Wire(Bool())
   val hitIdx  = Wire(UInt())
-  maskHit := meta(index).map(_.tag === raddr(p.addrWidth-1, p.addrWidth-cacheParams.tagWidth))
-  hitIdx  := PriorityEncoder(maskHit)
-  hit     := maskHit.reduce(_||_) && meta(index)(hitIdx).valid
+  hit     := meta(index).exists((x)=>{x.tag === tag && x.valid})
+  hitIdx  := meta(index).indexWhere((x)=>{x.tag === tag && x.valid})
 
   val evictIdx = Wire(UInt())
-  evictIdx := 0.U
-  //printf(cf"%T maskInvalid_0=${maskInvalid(0)}, maskInvalid_1=${maskInvalid(1)}, maskInvalid_2=${maskInvalid(2)}, maskInvalid_3=${maskInvalid(3)}\n")
-  //printf(cf"first:=${firstInvalidIdx}, index:=${index}, hasInvalid:=${hasInvalid}\n")
+  evictIdx := Mux(hasInvalid, firstInvalidIdx, 0.U)
 
-  
+  val rHitData  = Wire(Vec(p.dataBytes, UInt(8.W)))
+  val rMissData = Wire(Vec(p.dataBytes, UInt(8.W)))
+  for(i <- 0 until p.dataBytes) {
+    rHitData(i) := data(index)(hitIdx)(offset + i.U)
+    rMissData(i) := recData(offset + i.U)
+  }
+
+  val wmask = Wire(UInt(cacheParams.blockWidth.W))
+  val wBlockData = Wire(UInt(cacheParams.blockWidth.W))
+  val wRecData = Wire(UInt(cacheParams.blockWidth.W))
+  val wRecBytes = Wire(Vec(cacheParams.blockBytes, UInt(8.W)))
+  wmask := ~0.U(p.dataWidth.W) << (offset * 8.U)
+  wBlockData := wdata << (offset * 8.U)
+  wRecData := (Cat(recData) & ~wmask) | (wBlockData & wmask)
+  for(i <- 0 until cacheParams.blockBytes) {
+    wRecBytes(i) := wRecData((i+1)*8-1,i*8)
+  }
 
   cpu_in.ready := !busy
   cpu_out.valid := resultValid
@@ -62,63 +83,55 @@ class Cache(implicit p: Parameters) extends Module with HasCacheParams{
 
   mem_in.ready := mem_ready
   mem_out.valid := mem_valid
-  mem_out.bits.wen := wen
-  mem_out.bits.waddr := Cat(meta(index)(evictIdx).tag, index, waddr(cacheParams.offset-1, 0))
-  mem_out.bits.wdata := data(index)(evictIdx)
-  mem_out.bits.raddr := raddr
+  mem_out.bits := DontCare
   
   when(busy){
     when(!resultValid) {
-      //Write
-      when(wen) {
-        //Don't need to evict
-        when(hit) {
+      when(hit) {
+        when(wen) {
           meta(index)(hitIdx).dirty := true.B
-          data(index)(hitIdx)       := wdata
-          resultValid := true.B
-        }
-        .elsewhen(hasInvalid) {
-          meta(index)(firstInvalidIdx).valid := true.B
-          meta(index)(firstInvalidIdx).tag   := waddr(p.addrWidth-1, p.addrWidth-cacheParams.tagWidth)
-          meta(index)(firstInvalidIdx).dirty := false.B
-          data(index)(firstInvalidIdx)       := wdata
-          resultValid := true.B
-        }.otherwise {
-          //Need to evict
-          when(meta(index)(evictIdx).dirty) {
-            mem_valid := true.B
-            when(mem_in.valid) {
-              mem_valid := false.B
-              meta(index)(evictIdx).valid := false.B
-            }
-          }.otherwise {
-            meta(index)(evictIdx).tag   := waddr(p.addrWidth-1, p.addrWidth-cacheParams.tagWidth)
-            meta(index)(evictIdx).dirty := true.B
-            data(index)(evictIdx)       := wdata
-            resultValid     := true.B
+          for(i <- 0 until p.dataBytes) {
+            data(index)(hitIdx)(offset + i.U) := wdata((i+1)*8-1, i*8)
           }
-        }
-      }.otherwise {
-        //Read
-        when(hit) {
-          rdata := data(index)(hitIdx)
-          resultValid := true.B
         }.otherwise {
+          rdata := Cat(rHitData.reverse)
+        }
+        resultValid := true.B
+      }.otherwise {
+        //Recover block from memory
+        when(recover) {
           mem_valid := true.B
+          mem_out.bits.wen := false.B
+          mem_out.bits.raddr := recAddr
+          when(mem_in.valid){
+            mem_valid := false.B
+            recData := mem_in.bits.rdata
+            recover := false.B
+            writeBack := !hasInvalid && meta(index)(evictIdx).dirty
+          }
+        }.elsewhen(writeBack) {
+          mem_valid := true.B
+          mem_out.bits.wen := true.B
+          mem_out.bits.waddr := Cat(meta(index)(evictIdx).tag, index, 0.U(cacheParams.offset.W))
+          mem_out.bits.wdata := data(index)(evictIdx)
           when(mem_in.valid) {
             mem_valid := false.B
-            rdata := mem_in.bits.rdata
-            wen := true.B
-            waddr := raddr
-            wdata := rdata
+            writeBack := false.B
           }
-
+        }.otherwise {
+          meta(index)(evictIdx).valid := true.B
+          meta(index)(evictIdx).dirty := wen
+          meta(index)(evictIdx).tag   := tag
+          data(index)(evictIdx)       := Mux(wen, wRecBytes, recData)
+          rdata := Cat(rMissData.reverse)
+          resultValid := true.B
         }
       }
     }
     when(cpu_out.ready && resultValid) {
       busy := false.B
       resultValid := false.B
+      recover := true.B
     }
   }.otherwise{
     when(cpu_in.valid) {
@@ -128,7 +141,7 @@ class Cache(implicit p: Parameters) extends Module with HasCacheParams{
       wdata := req.wdata
       raddr := req.raddr
       busy := true.B
-      printf(cf"Receive wen=${req.wen}, waddr=0x${req.waddr}%x, wdata=0x${req.wdata}%x, raddr=0x${req.raddr}%x\n")
+      //printf(cf"Receive wen=${req.wen}, waddr=0x${req.waddr}%x, wdata=0x${req.wdata}%x, raddr=0x${req.raddr}%x\n")
     }
   }
 }

@@ -11,15 +11,15 @@ class CPUOutputBundle(implicit p: Parameters) extends Bundle {
   val rdata = UInt(p.dataWidth.W)
 }
 
-class MemoryInputBundle(implicit p: Parameters) extends Bundle {
+class MemoryInputBundle(implicit p: Parameters) extends Bundle with HasMemoryParams {
   val wen = Bool()
   val waddr = UInt(p.addrWidth.W)
-  val wdata = UInt(p.dataWidth.W)
+  val wdata = Vec(memoryParams.nBurstBytes, UInt(8.W))
   val raddr = UInt(p.addrWidth.W)
 }
 
-class MemoryOutputBundle(implicit p: Parameters) extends Bundle {
-  val rdata = UInt(p.dataWidth.W)
+class MemoryOutputBundle(implicit p: Parameters) extends Bundle with HasMemoryParams{
+  val rdata = Vec(memoryParams.nBurstBytes, UInt(8.W))
 }
 
 
